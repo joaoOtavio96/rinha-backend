@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using RinhaBackend.Api.Data;
 using RinhaBackend.Api.Models;
 
@@ -8,11 +9,11 @@ namespace RinhaBackend.Api.Controllers;
 [Route("[controller]")]
 public class PessoasController : ControllerBase
 {
-    private readonly ApiDbContext _context;
+    private readonly IPessoaRepository _pessoaRepository;
 
-    public PessoasController(ApiDbContext context)
+    public PessoasController(IPessoaRepository pessoaRepository)
     {
-        _context = context;
+        _pessoaRepository = pessoaRepository;
     }
     
     [HttpPost]
@@ -22,13 +23,12 @@ public class PessoasController : ControllerBase
         {
             if (pessoa.Apelido is null || pessoa.Nome is null)
                 return new StatusCodeResult(422);
-            
-            _context.Pessoas.Add(pessoa);
-            _context.SaveChanges();
+
+            await _pessoaRepository.Add(pessoa);
 
             Response.Headers.Add("Location", $"/pessoas/{pessoa.Id}");
             
-            return Ok();
+            return Created(new Uri(Request.Path), pessoa);
         }
         catch
         {
@@ -43,14 +43,8 @@ public class PessoasController : ControllerBase
         {
             if (t is null)
                 return BadRequest();
-            
-            var pessoas = _context.Pessoas.Where(p =>
-                    p.Apelido.ToUpper().Contains(t.ToUpper()) ||
-                    p.Nome.ToUpper().Contains(t.ToUpper()) ||
-                    p.Stack.Any(s => s.ToUpper().Contains(t.ToUpper()))
-                )
-                .Take(50)
-                .ToList();
+
+            var pessoas = await _pessoaRepository.Search(t);
 
             return Ok(pessoas);
         }
@@ -65,7 +59,7 @@ public class PessoasController : ControllerBase
     {
         try
         {
-            var pessoa = _context.Pessoas.FirstOrDefault(p => p.Id == id);
+            var pessoa = await _pessoaRepository.Get(id);
 
             return pessoa is null ? NotFound() : Ok(pessoa);
         }
@@ -80,7 +74,7 @@ public class PessoasController : ControllerBase
     {
         try
         {
-            return Ok(_context.Pessoas.Count());
+            return Ok(await _pessoaRepository.Count());
         }
         catch
         {
